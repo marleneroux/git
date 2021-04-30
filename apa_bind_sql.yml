@@ -1,0 +1,113 @@
+---
+- name: install apache/bind/mysql et deploiement
+  hosts: all
+  tasks:
+    - name: update
+      apt:
+        update_cache: yes
+    - name: apt install apache, bind9, mysql
+      apt:
+        name: ['apache2', 'bind9', 'mariadb-server', 'python-pymysql']
+        state: latest
+
+#configuration de apache
+
+    - name: copie du fichier marlene.conf
+      template:
+        src: /root/ansible/marlene.conf
+        dest: /etc/apache2/sites-available/marlene.conf
+    - name: creation du lien symbolique     
+      command: a2ensite marlene.conf 
+      args:
+         creates: /etc/apache2/sites-enabled/marlene.conf
+    - name:  command create directory /var/www/html/test 
+      file:
+        path: /var/test/index.html
+        state: directory
+    - name: copie du fichier index.html
+      copy:
+         src: /root/ansible/index.html
+         dest: /var/www/html/test/index.html
+
+#configuration https
+ 
+    - name: copie du fichier server.crt(certificat autosigne https)
+      copy:
+         src: /etc/apache2/server.crt
+         dest: /etc/apache2/server.crt
+    - name: copie du fichier server.key(clef pour chiffrer https)
+      copy:
+         src: /etc/apache2/server.key
+         dest: /etc/apache2/server.key
+    - name: copie du fichier security.conf
+      copy:
+         src: /etc/apache2/conf-available/security.conf
+         dest: /etc/apache2/conf-available/security.conf
+ 
+#configuration de bind
+ 
+    - name: copie du fichier marlene.zone (bind)
+      copy:
+         src: /root/ansible/marlene.zone
+         dest: /etc/bind/marlene.zone
+    - name: copie du fichier named.conf.local (bind)
+      copy:
+         src: /root/ansible/named.conf.local
+         dest: /etc/bind/named.conf.local 
+
+#activation du module ssl config apache2
+
+    - apache2_module:
+        state: present
+        name: ssl 
+
+#redemarrage de apache et bind
+
+    - name: restart apache2
+      shell: systemctl restart apache2
+    - name: restart bind9
+      shell: systemctl restart bind9
+
+#configuration de mariadb
+ 
+    - name: changer le mot de passe de root
+      copy:
+        dest: "/root/.my.cnf"
+        content:
+         '[client]
+         user=root
+         password=marlene'
+#      mysql_user:
+#        name: root
+#        password: marlene
+#        login_unix_socket: /var/run/mysqld/mysqld.sock
+    - name: create user marl
+      mysql_user:
+        name: marl
+        password: marlene
+        priv: '*.*:ALL'
+        host: '%'
+        state: present
+        login_user: root
+        login_password: marlene 
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: create user bob
+      mysql_user:
+        name: bob
+        password: marlene
+        priv: '*.*:ALL,GRANT'
+        host: localhost
+        state: present
+        login_user: root
+        login_password: marlene
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+    - name: Configuration workbench
+      copy:
+         src: /etc/mysql/mariadb.conf.d/50-server.cnf
+         dest: /etc/mysql/mariadb.conf.d/50-server.cnf
+      
+    - name: restart maria db
+      shell: systemctl restart mariadb
+...
+
